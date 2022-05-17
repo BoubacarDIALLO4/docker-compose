@@ -1,0 +1,49 @@
+name: $(Build.BuildId)
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    exclude:
+      - README.md
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/main') }}: 
+    tag: $(Build.BuildId) # building on main branch
+  ${{ if startsWith(variables['Build.SourceBranch'], 'refs/pull/') }}:
+    tag: $(Build.BuildId)-pr # building with PR
+  ${{ if and(ne(variables['Build.SourceBranch'], 'refs/heads/main'), not(startsWith(variables['Build.SourceBranch'], 'refs/pull/'))) }}: 
+    tag: $(Build.BuildId)-unstable # building on other branches
+  container_registry: acrdsfinventory.azurecr.io
+  repository: aivi-artifisv2/robot
+  image: $(container_registry)/$(repository):$(tag)
+
+
+steps:
+  - checkout: self
+    fetchDepth: "3"
+
+  - script: |
+      echo "##vso[build.updatebuildnumber]$(tag)"
+    displayName: Update build name
+
+  - script: |
+      docker-compose build
+    displayName: Build docker image
+
+  - script: |
+      docker-compose run integration_tests
+    displayName: Run integration tests
+
+  - task: Docker@2
+    displayName: Push docker image
+    condition: and(succeeded(), not(startsWith(variables['Build.SourceBranch'], 'refs/pull/')))
+    inputs:
+      containerRegistry: $(container_registry)
+      repository: $(repository)
+      command: push
+      tags: $(tag)

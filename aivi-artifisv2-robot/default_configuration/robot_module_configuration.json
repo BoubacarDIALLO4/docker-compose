@@ -1,0 +1,7 @@
+{
+    "cycle_time": 48,
+    "previous_transition_point": "HOME",
+    "cumulated_time": 0,
+    "acceptance_threshold": 1,
+    "upload_ftp": true
+}

@@ -1,0 +1,74 @@
+version: "3.9"
+
+services:
+  robot:
+    image: ${IMAGE:-robot:local}
+    build: .
+    environment:
+      - AMQP_HOST=rabbitmq
+      - ROBOT_IP_ADDRESS=ftp_server
+      - ROBOT_PORT=21
+      - FTP_USER=guest
+      - FTP_PASSWORD=guest
+      - SERVER_OUTPUT_DIRECTORY=/
+      - INPUT_ORDER_FILE_NAME=orders.csv
+      - BLOB_CONTAINER_NAME=stlocal
+      - BLOB_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=http;BlobEndpoint=http://blob_storage:11002/stlocal;AccountName=stlocal;AccountKey=EIzML0xmMD5jbDuKwT6Ph5Gi/emRFYFk1oCJhFgz7IIAWjYBUx2YDiDapPd9nSSnlB+SZQ925i6WJ8fBxTr4/g==;
+      - OUTPUT_EXCHANGE=robot_output
+      - INPUT_EXCHANGE=ROBOT_INPUT
+      - METRICS_PORT=9605
+    depends_on:
+      - rabbitmq
+      - blob_storage
+      - ftp_server
+    command:
+      [
+        "./scripts/wait-for-it.sh",
+        "rabbitmq:5672",
+        "--",
+        "./scripts/wait-for-it.sh",
+        "blob_storage:11002",
+        "--",
+        "./scripts/wait-for-it.sh",
+        "ftp_server:21",
+        "--",
+        "python",
+        "main.py"
+      ]
+
+
+  rabbitmq:
+    image: "rabbitmq:3-management"
+    ports:
+      - 5010:15672
+
+  blob_storage:
+    image: 'mcr.microsoft.com/azure-blob-storage:1.4'
+    environment:
+      - LOCAL_STORAGE_ACCOUNT_NAME=stlocal
+      - LOCAL_STORAGE_ACCOUNT_KEY=EIzML0xmMD5jbDuKwT6Ph5Gi/emRFYFk1oCJhFgz7IIAWjYBUx2YDiDapPd9nSSnlB+SZQ925i6WJ8fBxTr4/g==
+
+  ftp_server:
+    image: stilliard/pure-ftpd
+    container_name: pure-ftpd
+    ports:
+      - "21:21"
+      - "30000-30009:30000-30009"
+    environment:
+     - FTP_USER_NAME=guest
+     - FTP_USER_PASS=guest
+     - FTP_USER_HOME=/home
+    restart: always
+
+  integration_tests:
+    build: integration_tests
+    depends_on:
+      - robot
+    command:
+      [
+        "./scripts/wait-for-it.sh",
+        "robot:9605",
+        "--",
+        "behave"
+      ]
+
